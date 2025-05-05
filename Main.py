@@ -1,19 +1,31 @@
+import io
 import streamlit as st
 import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+import pydeck as pdk
+from plotly.subplots import make_subplots
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
 
+# Page configuration
 st.set_page_config(
     page_title="Population Analytics Dashboard",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Data loading
 @st.cache_data
 def load_data(path="cleaned_lka_2020_subset_50000.csv"):
-    return pd.read_csv(path)
-
-df = load_data()
+    """Load the cleaned 2020 subset into a DataFrame."""
+    df = pd.read_csv(path)
+    return df
 
 def calculate_key_metrics(df):
+    """Calculate key population metrics."""
     return {
         "Overall": int(df["pop_overall"].sum()),
         "Male": int(df["pop_men"].sum()),
@@ -25,10 +37,16 @@ def calculate_key_metrics(df):
     }
 
 def format_number(num):
-    return f"{num:,.0f}" if isinstance(num, (int, float)) else num
+    """Format numbers with commas and handle different types."""
+    if isinstance(num, (int, float)):
+        return f"{num:,.0f}"
+    return num
 
+# Load the data
+df = load_data()
 metrics = calculate_key_metrics(df)
 
+# Divide into simple regions based on coordinates
 df['region'] = 'Central'
 df.loc[df['latitude'] > 8.0, 'region'] = 'Northern'
 df.loc[(df['latitude'] <= 8.0) & (df['latitude'] > 7.5) & (df['longitude'] < 80.5), 'region'] = 'Western'
@@ -88,7 +106,7 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Data source: Census 2020")
     filtered_metrics = calculate_key_metrics(filtered_df)
-    st.markdown(f"*Total Population:* {format_number(filtered_metrics['Overall'])}")
+    st.markdown(f"**Total Population:** {format_number(filtered_metrics['Overall'])}")
     percentage_of_total = filtered_metrics['Overall'] / metrics['Overall'] * 100
     st.caption(f"{percentage_of_total:.1f}% of total population")
 
@@ -100,7 +118,7 @@ st.caption("Explore detailed demographic data across geographic divisions")
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Overview", 
     "👥 Demographics", 
-    "🗺 Spatial Analysis",
+    "🗺️ Spatial Analysis",
     "📈 Advanced Analytics",
     "📋 Data Explorer"
 ])
@@ -140,8 +158,8 @@ with tab1:
             xaxis=dict(showticklabels=False, showgrid=False, range=[0, 100])
         )
         st.plotly_chart(gender_fig, use_container_width=True)
-        st.markdown(f"*Male:* {format_number(metrics['Male'])} ({male_percentage:.1f}%)")
-        st.markdown(f"*Female:* {format_number(metrics['Female'])} ({female_percentage:.1f}%)")
+        st.markdown(f"**Male:** {format_number(metrics['Male'])} ({male_percentage:.1f}%)")
+        st.markdown(f"**Female:** {format_number(metrics['Female'])} ({female_percentage:.1f}%)")
         st.markdown('</div>', unsafe_allow_html=True)
     with col2:
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -168,15 +186,15 @@ with tab1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("Key Demographics")
         women_rep_percentage = metrics['Women of reproductive age (15–49)'] / metrics['Overall'] * 100
-        st.markdown(f"*Women (15-49):* {format_number(metrics['Women of reproductive age (15–49)'])} ({women_rep_percentage:.1f}%)")
+        st.markdown(f"**Women (15-49):** {format_number(metrics['Women of reproductive age (15–49)'])} ({women_rep_percentage:.1f}%)")
         dependent_pop = metrics['Children (0–5)'] + metrics['Elderly (60+)']
         working_age_pop = metrics['Overall'] - dependent_pop
         dependency_ratio = (dependent_pop / working_age_pop) * 100
-        st.markdown(f"*Dependency Ratio:* {dependency_ratio:.1f}%")
+        st.markdown(f"**Dependency Ratio:** {dependency_ratio:.1f}%")
         st.caption("(Ratio of dependents to working-age population)")
         sri_lanka_area = 65610
         pop_density = metrics['Overall'] / sri_lanka_area
-        st.markdown(f"*Population Density:* {pop_density:.1f}/km²")
+        st.markdown(f"**Population Density:** {pop_density:.1f}/km²")
         st.caption("(Average population per square kilometer)")
         st.markdown("---")
         st.markdown("See full demographic breakdown in the Demographics tab")
@@ -655,7 +673,7 @@ with tab4:
     This correlation matrix shows the relationship between different demographic variables. Values close to 1 indicate 
     strong positive correlation, while values close to -1 indicate strong negative correlation. A value of 0 means no correlation.
     
-    *Insights:*
+    **Insights:**
     - All population segments show strong correlation with overall population, as expected
     - Male and female populations are strongly correlated with each other
     - Children (0-5) show moderate to strong correlation with women of reproductive age (15-49)
@@ -733,7 +751,7 @@ with tab4:
     The Child-Woman Ratio (CWR) is a measure of fertility that shows the number of children under 5 years old 
     per 1,000 women of reproductive age (15-49 years). It serves as a simple fertility indicator when detailed birth data is unavailable.
     
-    *Interpretation:*
+    **Interpretation:**
     - Higher ratios indicate higher fertility rates
     - Lower ratios may indicate lower birth rates or smaller family sizes
     - Variations across regions can reflect differences in family planning, cultural practices, and socioeconomic factors
@@ -765,7 +783,7 @@ with tab4:
     st.markdown("""
     This scatter matrix shows relationships between different demographic variables across regions. Each point represents a region.
     
-    *How to read this chart:*
+    **How to read this chart:**
     - Each cell shows the relationship between two demographic variables
     - Points are colored by region
     - Patterns in the scatter plots can reveal correlations and regional differences

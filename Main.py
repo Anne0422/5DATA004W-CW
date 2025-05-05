@@ -464,3 +464,410 @@ with tab2:
     with stats_col5:
         st.metric("Total", format_number(filtered_df[selected_demo_key].sum()))
     st.markdown('</div>', unsafe_allow_html=True)
+
+# --------- TAB 3: SPATIAL ANALYSIS ---------
+with tab3:
+    st.header("Spatial Distribution Analysis")
+    map_options = st.columns([3, 1])
+    with map_options[0]:
+        map_type = st.radio("Map Type", options=["Heat Map", "Scatter Plot", "3D Elevation"], horizontal=True)
+    with map_options[1]:
+        map_height = st.slider("Map Height", 400, 800, 600, 50)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    demo_col = selected_col
+    demo_name = selected_demo
+    if map_type == "Heat Map":
+        heat_layer = pdk.Layer(
+            "HeatmapLayer",
+            data=filtered_df,
+            opacity=0.8,
+            get_position=["longitude", "latitude"],
+            get_weight=demo_col,
+            threshold=0.1,
+            aggregation="SUM",
+            pickable=True
+        )
+        view_state = pdk.ViewState(
+            latitude=filtered_df["latitude"].mean(),
+            longitude=filtered_df["longitude"].mean(),
+            zoom=8,
+            pitch=0,
+        )
+        heat_map = pdk.Deck(
+            layers=[heat_layer],
+            initial_view_state=view_state,
+            tooltip={"text": f"{demo_name}: {{{demo_col}}}"},
+            height=map_height
+        )
+        st.subheader(f"Heat Map of {demo_name}")
+        st.pydeck_chart(heat_map, use_container_width=True)
+    elif map_type == "Scatter Plot":
+        scatter_layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=filtered_df,
+            get_position=["longitude", "latitude"],
+            get_radius=f"{demo_col} / 20",
+            pickable=True,
+            opacity=0.8,
+            stroked=True,
+            filled=True,
+            radius_scale=2,
+            radius_min_pixels=3,
+            radius_max_pixels=30,
+            line_width_min_pixels=1,
+        )
+        view_state = pdk.ViewState(
+            latitude=filtered_df["latitude"].mean(),
+            longitude=filtered_df["longitude"].mean(),
+            zoom=8,
+            pitch=0,
+        )
+        scatter_map = pdk.Deck(
+            layers=[scatter_layer],
+            initial_view_state=view_state,
+            tooltip={...},
+            height=map_height
+        )
+        st.subheader(f"Population Density of {demo_name}")
+        st.pydeck_chart(scatter_map, use_container_width=True)
+    else:  # 3D Elevation
+        elevation_layer = pdk.Layer(
+            "HexagonLayer",
+            data=filtered_df,
+            get_position=["longitude", "latitude"],
+            get_elevation=f"{demo_col} / 50",
+            elevation_scale=50,
+            pickable=True,
+            elevation_range=[0, 3000],
+            extruded=True,
+            coverage=1,
+        )
+        view_state = pdk.ViewState(
+            latitude=filtered_df["latitude"].mean(),
+            longitude=filtered_df["longitude"].mean(),
+            zoom=7.5,
+            pitch=40,
+        )
+        elevation_map = pdk.Deck(
+            layers=[elevation_layer],
+            initial_view_state=view_state,
+            tooltip={"text": f"Elevation represents {demo_name}"},
+            height=map_height
+        )
+        st.subheader(f"3D Elevation Map of {demo_name}")
+        st.pydeck_chart(elevation_map, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Regional Population Analysis")
+    col1, col2 = st.columns(2)
+    with col1:
+        region_data = df.groupby('region').agg(
+            latitude=('latitude', 'mean'),
+            longitude=('longitude', 'mean'),
+            population=('pop_overall', 'sum'),
+            population_selected=(selected_col, 'sum')
+        ).reset_index()
+        region_map = px.scatter_mapbox(
+            region_data,
+            lat="latitude",
+            lon="longitude",
+            size="population",
+            color="region",
+            hover_name="region",
+            hover_data=["population", "population_selected"],
+            zoom=7,
+            height=400,
+            mapbox_style="carto-positron",
+            title=f"Regional Distribution of {demo_name}"
+        )
+        region_map.update_layout(margin={"r": 0, "t": 40, "l": 0, "b": 0})
+        st.plotly_chart(region_map, use_container_width=True)
+    with col2:
+        radar_data = df.groupby('region').agg(
+            total=('pop_overall', 'sum'),
+            male=('pop_men', 'sum'),
+            female=('pop_women', 'sum'),
+            children=('pop_0_5', 'sum'),
+            youth=('pop_15_24', 'sum'),
+            elderly=('pop_60_plus', 'sum'),
+            women_reproductive=('pop_women_15_49', 'sum')
+        ).reset_index()
+        cols_to_normalize = radar_data.columns.difference(['region'])
+        for col in cols_to_normalize:
+            max_val = radar_data[col].max()
+            radar_data[f'{col}_norm'] = radar_data[col] / max_val
+        radar_fig = go.Figure()
+        categories = ['Total', 'Male', 'Female', 'Children', 'Youth', 'Elderly', 'Women (15-49)']
+        for i, region in enumerate(radar_data['region']):
+            radar_fig.add_trace(go.Scatterpolar(
+                r=[
+                    radar_data.loc[i, 'total_norm'],
+                    radar_data.loc[i, 'male_norm'],
+                    radar_data.loc[i, 'female_norm'],
+                    radar_data.loc[i, 'children_norm'],
+                    radar_data.loc[i, 'youth_norm'],
+                    radar_data.loc[i, 'elderly_norm'],
+                    radar_data.loc[i, 'women_reproductive_norm']
+                ],
+                theta=categories,
+                fill='toself',
+                name=region
+            ))
+        radar_fig.update_layout(
+            polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
+            title="Regional Demographic Comparison",
+            height=400,
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
+        st.plotly_chart(radar_fig, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# --------- TAB 4: ADVANCED ANALYTICS ---------
+with tab4:
+    st.header("Advanced Population Analytics")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Demographic Correlation Analysis")
+    demographic_cols = [
+        'pop_overall', 'pop_men', 'pop_women',
+        'pop_0_5', 'pop_15_24', 'pop_60_plus', 'pop_women_15_49'
+    ]
+    correlation = df[demographic_cols].corr()
+    corr_fig = px.imshow(
+        correlation,
+        text_auto=".2f",
+        color_continuous_scale="RdBu_r",
+        title="Correlation between Demographic Variables"
+    )
+    corr_fig.update_layout(height=500, margin=dict(l=0, r=0, t=40, b=0))
+    better_labels = {
+        'pop_overall': 'Total',
+        'pop_men': 'Male',
+        'pop_women': 'Female',
+        'pop_0_5': 'Children',
+        'pop_15_24': 'Youth',
+        'pop_60_plus': 'Elderly',
+        'pop_women_15_49': 'Women 15-49'
+    }
+    corr_fig.update_xaxes(ticktext=list(better_labels.values()), tickvals=list(range(len(better_labels))))
+    corr_fig.update_yaxes(ticktext=list(better_labels.values()), tickvals=list(range(len(better_labels))))
+    st.plotly_chart(corr_fig, use_container_width=True)
+    st.markdown("""
+    This correlation matrix shows the relationship between different demographic variables. Values close to 1 indicate 
+    strong positive correlation, while values close to -1 indicate strong negative correlation. A value of 0 means no correlation.
+    
+    *Insights:*
+    - All population segments show strong correlation with overall population, as expected
+    - Male and female populations are strongly correlated with each other
+    - Children (0-5) show moderate to strong correlation with women of reproductive age (15-49)
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Gender Ratio Analysis")
+    df['gender_ratio'] = df['pop_men'] / df['pop_women'] * 100
+    gender_hist = px.histogram(
+        df,
+        x='gender_ratio',
+        nbins=50,
+        title="Distribution of Gender Ratios (Males per 100 Females)",
+        opacity=0.7,
+        marginal='box'
+    )
+    gender_hist.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20), xaxis_title="Gender Ratio (Males per 100 Females)", yaxis_title="Number of Divisions")
+    gender_hist.add_vline(x=100, line_dash="dash", line_color="red", annotation_text="Gender Parity")
+    st.plotly_chart(gender_hist, use_container_width=True)
+    region_gender = df.groupby('region').agg(male=('pop_men','sum'), female=('pop_women','sum')).reset_index()
+    region_gender['gender_ratio'] = region_gender['male'] / region_gender['female'] * 100
+    region_gender = region_gender.sort_values('gender_ratio')
+    gender_bar = px.bar(
+        region_gender,
+        y='region',
+        x='gender_ratio',
+        orientation='h',
+        title="Gender Ratio by Region (Males per 100 Females)",
+        color_continuous_scale="RdBu_r",
+        text=region_gender['gender_ratio'].round(1).astype(str)
+    )
+    gender_bar.update_layout(height=300, margin=dict(l=20, r=20, t=40, b=20), xaxis_title="Gender Ratio", yaxis_title="Region")
+    gender_bar.add_vline(x=100, line_dash="dash", line_color="black", annotation_text="Gender Parity")
+    gender_bar.update_traces(textposition='outside', hovertemplate='<b>%{y}</b><br>Gender Ratio: %{x:.1f}<extra></extra>')
+    st.plotly_chart(gender_bar, use_container_width=True)
+    st.markdown("""
+    The gender ratio is the number of males per 100 females in a population. A ratio of 100 indicates an equal number of males and females.
+    - A ratio greater than 100 indicates more males than females
+    - A ratio less than 100 indicates more females than males
+    
+    Variations in gender ratio can be influenced by biological factors, migration patterns, and socioeconomic factors.
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Child-Woman Ratio Analysis")
+    df['child_woman_ratio'] = (df['pop_0_5'] / df['pop_women_15_49']) * 1000
+    cwr_hist = px.histogram(
+        df,
+        x='child_woman_ratio',
+        nbins=50,
+        title="Distribution of Child-Woman Ratios",
+        opacity=0.7,
+        marginal='box'
+    )
+    cwr_hist.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20), xaxis_title="Child-Woman Ratio (Children per 1000 Women)", yaxis_title="Number of Divisions")
+    mean_cwr = df['child_woman_ratio'].mean()
+    cwr_hist.add_vline(x=mean_cwr, line_dash="dash", line_color="red", annotation_text=f"Mean: {mean_cwr:.1f}")
+    st.plotly_chart(cwr_hist, use_container_width=True)
+    region_cwr = df.groupby('region').agg(children=('pop_0_5','sum'), women_reproductive=('pop_women_15_49','sum')).reset_index()
+    region_cwr['child_woman_ratio'] = (region_cwr['children'] / region_cwr['women_reproductive']) * 1000
+    region_cwr = region_cwr.sort_values('child_woman_ratio')
+    cwr_bar = px.bar(
+        region_cwr,
+        y='region',
+        x='child_woman_ratio',
+        orientation='h',
+        title="Child-Woman Ratio by Region",
+        color_continuous_scale="Reds",
+        text=region_cwr['child_woman_ratio'].round(1).astype(str)
+    )
+    cwr_bar.update_layout(height=300, margin=dict(l=20, r=20, t=40, b=20), xaxis_title="Child-Woman Ratio (Children per 1000 Women)", yaxis_title="Region")
+    cwr_bar.update_traces(textposition='outside', hovertemplate='<b>%{y}</b><br>Child-Woman Ratio: %{x:.1f}%<extra></extra>')
+    st.plotly_chart(cwr_bar, use_container_width=True)
+    st.markdown("""
+    The Child-Woman Ratio (CWR) is a measure of fertility that shows the number of children under 5 years old 
+    per 1,000 women of reproductive age (15-49 years). It serves as a simple fertility indicator when detailed birth data is unavailable.
+    
+    *Interpretation:*
+    - Higher ratios indicate higher fertility rates
+    - Lower ratios may indicate lower birth rates or smaller family sizes
+    - Variations across regions can reflect differences in family planning, cultural practices, and socioeconomic factors
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Comparative Regional Analysis")
+    scatter_data = df.groupby('region').agg(
+        total=('pop_overall','sum'),
+        male=('pop_men','sum'),
+        female=('pop_women','sum'),
+        children=('pop_0_5','sum'),
+        youth=('pop_15_24','sum'),
+        elderly=('pop_60_plus','sum')
+    ).reset_index()
+    for col in scatter_data.columns:
+        if col != 'region':
+            scatter_data[col] = scatter_data[col] / 1000
+    scatter_matrix = px.scatter_matrix(
+        scatter_data,
+        dimensions=['total', 'male', 'female', 'children', 'youth', 'elderly'],
+        color='region',
+        title="Demographic Correlation by Region (in thousands)",
+        height=700
+    )
+    scatter_matrix.update_layout(margin=dict(l=20, r=20, t=40, b=20))
+    scatter_matrix.update_traces(diagonal_visible=False)
+    st.plotly_chart(scatter_matrix, use_container_width=True)
+    st.markdown("""
+    This scatter matrix shows relationships between different demographic variables across regions. Each point represents a region.
+    
+    *How to read this chart:*
+    - Each cell shows the relationship between two demographic variables
+    - Points are colored by region
+    - Patterns in the scatter plots can reveal correlations and regional differences
+    - Diagonal alignment of points suggests strong correlation between the variables
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# --------- TAB 5: DATA EXPLORER ---------
+with tab5:
+    st.header("Data Explorer")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Interactive Data Table")
+    display_df = filtered_df.copy()
+    display_df['gender_ratio'] = display_df['pop_men'] / display_df['pop_women'] * 100
+    display_df['dependency_ratio'] = (display_df['pop_0_5'] + display_df['pop_60_plus']) / (display_df['pop_overall'] - display_df['pop_0_5'] - display_df['pop_60_plus']) * 100
+    display_df['child_woman_ratio'] = (display_df['pop_0_5'] / display_df['pop_women_15_49']) * 1000
+    columns_to_display = {
+        'region': 'Region',
+        'latitude': 'Latitude',
+        'longitude': 'Longitude',
+        'pop_overall': 'Total Population',
+        'pop_men': 'Male Population',
+        'pop_women': 'Female Population',
+        'pop_0_5': 'Children (0-5)',
+        'pop_15_24': 'Youth (15-24)',
+        'pop_60_plus': 'Elderly (60+)',
+        'pop_women_15_49': 'Women (15-49)',
+        'gender_ratio': 'Gender Ratio',
+        'dependency_ratio': 'Dependency Ratio',
+        'child_woman_ratio': 'Child-Woman Ratio'
+    }
+    display_df = display_df.rename(columns=columns_to_display)
+    with st.expander("Select Columns to Display", expanded=False):
+        selected_columns = st.multiselect(
+            "Columns",
+            options=list(columns_to_display.values()),
+            default=['Region', 'Total Population', 'Male Population', 'Female Population', 'Gender Ratio']
+        )
+    if not selected_columns:
+        selected_columns = ['Region', 'Total Population', 'Male Population', 'Female Population', 'Gender Ratio']
+    st.dataframe(display_df[selected_columns], use_container_width=True, height=500, hide_index=True)
+    st.caption(f"Showing {len(display_df)} records based on current filters")
+    col1, col2 = st.columns(2)
+    with col1:
+        csv = display_df.to_csv(index=False).encode('utf-8')
+        st.download_button(label="Download as CSV", data=csv, file_name="population_data.csv", mime="text/csv")
+    with col2:
+        excel_buffer = io.BytesIO()
+        display_df.to_excel(excel_buffer, index=False, engine='openpyxl')
+        excel_data = excel_buffer.getvalue()
+        st.download_button(label="Download as Excel", data=excel_data, file_name="population_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Statistical Summary")
+    stats_df = display_df.describe().T.reset_index().rename(columns={'index': 'Variable'})
+    numeric_cols = stats_df.columns[1:]
+    for col in numeric_cols:
+        stats_df[col] = stats_df[col].map(lambda x: f"{x:,.2f}" if isinstance(x, (int, float)) else x)
+    st.dataframe(stats_df, use_container_width=True, hide_index=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Custom Visualization")
+    col1, col2 = st.columns(2)
+    with col1:
+        x_axis = st.selectbox("X-Axis", options=list(columns_to_display.values()), index=list(columns_to_display.values()).index('Total Population'))
+    with col2:
+        y_axis = st.selectbox("Y-Axis", options=list(columns_to_display.values()), index=list(columns_to_display.values()).index('Gender Ratio'))
+    col1, col2 = st.columns(2)
+    with col1:
+        color_by = st.selectbox("Color By", options=['Region', 'None'], index=0)
+    with col2:
+        chart_type = st.selectbox("Chart Type", options=['Scatter Plot', 'Bar Chart', 'Line Chart', 'Box Plot'], index=0)
+    rev_columns = {v: k for k, v in columns_to_display.items()}
+    if chart_type == 'Scatter Plot':
+        if color_by == 'None':
+            custom_fig = px.scatter(display_df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}", opacity=0.7, size='Total Population', hover_name='Region')
+        else:
+            custom_fig = px.scatter(display_df, x=x_axis, y=y_axis, color=color_by, title=f"{y_axis} vs {x_axis} by {color_by}", opacity=0.7, size='Total Population', hover_name='Region')
+    elif chart_type == 'Bar Chart':
+        if x_axis == 'Region':
+            grouped_df = display_df.groupby('Region').agg({y_axis: 'mean'}).reset_index()
+            custom_fig = px.bar(grouped_df, x='Region', y=y_axis, title=f"{y_axis} by {x_axis}", color='Region' if color_by != 'None' else None)
+        else:
+            custom_fig = px.histogram(display_df, x=x_axis, y=y_axis, title=f"{y_axis} by {x_axis}", color='Region' if color_by != 'None' else None, histfunc='avg')
+    elif chart_type == 'Line Chart':
+        if x_axis != 'Region':
+            sorted_df = display_df.sort_values(by=x_axis)
+            custom_fig = px.line(sorted_df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}", color='Region' if color_by != 'None' else None)
+        else:
+            grouped_df = display_df.groupby('Region').agg({y_axis: 'mean'}).reset_index()
+            custom_fig = px.line(grouped_df, x='Region', y=y_axis, title=f"{y_axis} by {x_axis}", markers=True)
+    elif chart_type == 'Box Plot':
+        if color_by != 'None':
+            custom_fig = px.box(display_df, x='Region' if x_axis == 'Region' else None, y=y_axis, title=f"Distribution of {y_axis}" + (f" by {x_axis}" if x_axis == 'Region' else ""), color='Region')
+        else:
+            custom_fig = px.box(display_df, y=y_axis, title=f"Distribution of {y_axis}")
+    custom_fig.update_layout(height=500, margin=dict(l=20, r=20, t=40, b=20))
+    st.plotly_chart(custom_fig, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown("""
+    <div class="footer">
+        <p>💡 Developed by Anne Fernando • Data Source: WFP/OCHA via HDX • © 2025 Population Explorer</p>
+    </div>
+""", unsafe_allow_html=True)
